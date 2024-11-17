@@ -64,3 +64,14 @@ jobs:
           ls -la appstream_parser
           echo "List Dependencies"
           ldd appstream_parser
+
+      - name: Fetch appstream.xml
+        working-directory: ${{github.workspace}}
+        run: |
+          wget https://dl.flathub.org/repo/appstream/x86_64/appstream.xml.gz
+          gunzip appstream.xml.gz
+
+      - name: Run appstream_parser
+        working-directory: ${{github.workspace}}/build/release
+        run: |
+          ./appstream_parser ${{github.workspace}}/appstream.xml
