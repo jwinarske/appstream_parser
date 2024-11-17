@@ -1,0 +1,66 @@
+name: appstream-parser
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, closed ]
+  release:
+    types: [ published, created, edited ]
+  workflow_dispatch:
+
+jobs:
+
+  appstream-parser:
+
+    env:
+      VERSION: 0.0.1
+
+    strategy:
+      matrix:
+        os: [ ubuntu-20.04, ubuntu-22.04, ubuntu-24.04 ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Install packages
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install libflatpak-dev libxml2-dev zlib1g-dev flatpak
+          echo "flatpak list"
+          flatpak list
+
+      - name: Configure Debug
+        run: |
+          mkdir -p ${{github.workspace}}/build/debug
+          cmake ${{github.workspace}} -B ${{github.workspace}}/build/debug
+
+      - name: Build Debug
+        working-directory: ${{github.workspace}}/build/debug
+        run: |
+          rm -rf _packages || true
+          make package -j
+          ls -la _packages
+
+      - name: Configure Release
+        run: |
+          mkdir -p ${{github.workspace}}/build/release
+          cmake ${{github.workspace}} -B ${{github.workspace}}/build/release
+
+      - name: Build Release Package
+        working-directory: ${{github.workspace}}/build/release
+        run: |
+          rm -rf _packages || true
+          make package -j
+          ls -la _packages
+          echo "Release Info"
+          ls -la appstream_parser
+          echo "Strip executable"
+          strip appstream_parser
+          ls -la appstream_parser
+          echo "List Dependencies"
+          ldd appstream_parser
