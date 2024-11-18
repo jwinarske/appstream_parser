@@ -17,7 +17,6 @@
 #ifndef COMPONENT_H
 #define COMPONENT_H
 
-#include <map>
 #include <optional>
 #include <string>
 #include <unordered_map>
