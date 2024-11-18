@@ -33,8 +33,7 @@ constexpr size_t CHUNK_SIZE = 1024;
 
 int convertToInt(const std::string &str) {
     try {
-        const int result = std::stoi(str);
-        return result;
+        return std::stoi(str);
     } catch (const std::invalid_argument &e) {
         spdlog::error("Invalid argument: could not convert to int: {}", str);
         throw;
@@ -49,21 +48,10 @@ size_t convertToSizeT(const char *str) {
     errno = 0;
     const long long result = std::strtoll(str, &endPtr, 10);
 
-    // Check for various possible errors
-    if ((errno == ERANGE && (result == LLONG_MAX || result == LLONG_MIN)) ||
-        (errno != 0 && result == 0)) {
-        std::perror("Conversion error");
-        return 0; // Or handle the error case more gracefully
-    }
-
-    if (endPtr == str) {
-        spdlog::error("Invalid argument: could not convert to size_t: {}", str);
-        return 0; // Or handle the error case more gracefully
-    }
-
-    if (result < 0 || static_cast<uint64_t>(result) > std::numeric_limits<size_t>::max()) {
-        spdlog::error("Value out of range: {}", str);
-        return 0; // Or handle the error case more gracefully
+    if (errno == ERANGE || errno != 0 || endPtr == str || result < 0 || static_cast<uint64_t>(result) >
+        std::numeric_limits<size_t>::max()) {
+        spdlog::error("Conversion error: {}", str);
+        return 0;
     }
 
     return result;
@@ -71,20 +59,10 @@ size_t convertToSizeT(const char *str) {
 
 // Function to parse a const char* as a Unix timestamp and convert to ISO 8601
 std::string unixEpochToISO8601(const char *epochStr) {
-    // Convert the input const char* to a time_t
     const std::time_t epoch = std::stoll(epochStr);
-
-    // Convert epoch to a time_point
-    const std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(epoch);
-
-    // Convert time_point to std::time_t to use std::gmtime
-    const std::time_t time = std::chrono::system_clock::to_time_t(tp);
-    const std::tm tm = *std::gmtime(&time);
-
-    // Use stringstream to format the time as ISO 8601
+    const std::tm tm = *std::gmtime(&epoch);
     std::stringstream ss;
     ss << std::put_time(&tm, "%Y-%m-%dT%H:%M:%S") << 'Z';
-
     return ss.str();
 }
 
@@ -96,7 +74,7 @@ void AppStreamParser::startElementCallback(void *user_data, const xmlChar *name,
 
     if (strcmp(tag, "component") == 0) {
         parser->state_.insideComponent = true;
-        parser->state_.currentComponent = Component();
+        parser->state_.currentComponent = std::make_shared<Component>();
         return;
     }
 
@@ -197,12 +175,12 @@ void AppStreamParser::startElementCallback(void *user_data, const xmlChar *name,
                 break;
             }
             if (strcmp(tag, "developer") == 0 && strcmp(key, "id") == 0) {
-                parser->state_.currentComponent.developer.id = value;
+                parser->state_.currentComponent->developer.id = value;
                 parser->state_.currentDeveloper = true;
                 break;
             }
             if (strcmp(tag, "bundle") == 0 && strcmp(key, "type") == 0) {
-                parser->state_.currentComponent.bundle.type = Component::stringToBundleType({value, value_len});
+                parser->state_.currentComponent->bundle.type = Component::stringToBundleType({value, value_len});
                 break;
             }
             if (strcmp(tag, "url") == 0 && strcmp(key, "type") == 0) {
@@ -223,69 +201,69 @@ void AppStreamParser::endElementCallback(void *user_data, const xmlChar *name) {
 
     if (parser->state_.insideComponent) {
         if (currentElement == "id") {
-            parser->state_.currentComponent.id = parser->state_.currentData;
+            parser->state_.currentComponent->id = parser->state_.currentData;
         } else if (currentElement == "pkgname") {
-            parser->state_.currentComponent.pkgname = parser->state_.currentData;
+            parser->state_.currentComponent->pkgname = parser->state_.currentData;
         } else if (currentElement == "source_pkgname") {
-            parser->state_.currentComponent.source_pkgname = parser->state_.currentData;
+            parser->state_.currentComponent->source_pkgname = parser->state_.currentData;
         } else if (currentElement == "name") {
             if (parser->state_.currentDeveloper) {
-                parser->state_.currentComponent.developer.name = parser->state_.currentData;
+                parser->state_.currentComponent->developer.name = parser->state_.currentData;
             } else {
-                parser->state_.currentComponent.name = parser->state_.currentData;
+                parser->state_.currentComponent->name = parser->state_.currentData;
             }
         } else if (currentElement == "project_license") {
-            parser->state_.currentComponent.projectLicense = parser->state_.currentData;
+            parser->state_.currentComponent->projectLicense = parser->state_.currentData;
         } else if (currentElement == "summary") {
-            parser->state_.currentComponent.summary = parser->state_.currentData;
+            parser->state_.currentComponent->summary = parser->state_.currentData;
         } else if (currentElement == "description") {
             if (parser->state_.insideReleases) {
                 parser->state_.currentRelease.description = parser->state_.currentData;
             } else {
-                parser->state_.currentComponent.description = parser->state_.currentData;
+                parser->state_.currentComponent->description = parser->state_.currentData;
             }
         } else if (currentElement == "url") {
             if (parser->state_.insideReleases) {
                 parser->state_.currentRelease.url = parser->state_.currentData;
             } else {
                 if (parser->state_.urlType == Component::UrlType::HELP) {
-                    parser->state_.currentComponent.url.help = parser->state_.currentData;
+                    parser->state_.currentComponent->url.help = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::CONTACT) {
-                    parser->state_.currentComponent.url.contact = parser->state_.currentData;
+                    parser->state_.currentComponent->url.contact = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::DONATION) {
-                    parser->state_.currentComponent.url.donation = parser->state_.currentData;
+                    parser->state_.currentComponent->url.donation = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::HOMEPAGE) {
-                    parser->state_.currentComponent.url.homepage = parser->state_.currentData;
+                    parser->state_.currentComponent->url.homepage = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::TRANSLATE) {
-                    parser->state_.currentComponent.url.translate = parser->state_.currentData;
+                    parser->state_.currentComponent->url.translate = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::FAQ) {
-                    parser->state_.currentComponent.url.faq = parser->state_.currentData;
+                    parser->state_.currentComponent->url.faq = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::BUGTRACKER) {
-                    parser->state_.currentComponent.url.bugtracker = parser->state_.currentData;
+                    parser->state_.currentComponent->url.bugtracker = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::CONTRIBUTE) {
-                    parser->state_.currentComponent.url.contribute = parser->state_.currentData;
+                    parser->state_.currentComponent->url.contribute = parser->state_.currentData;
                 } else if (parser->state_.urlType == Component::UrlType::VCS_BROWSER) {
-                    parser->state_.currentComponent.url.vcs_browser = parser->state_.currentData;
+                    parser->state_.currentComponent->url.vcs_browser = parser->state_.currentData;
                 } else {
-                    parser->state_.currentComponent.url.unknown = parser->state_.currentData;
+                    parser->state_.currentComponent->url.unknown = parser->state_.currentData;
                 }
             }
         } else if (currentElement == "project_group") {
-            parser->state_.currentComponent.project_group = parser->state_.currentData;
+            parser->state_.currentComponent->project_group = parser->state_.currentData;
         } else if (currentElement == "compulsory_for_desktop") {
-            parser->state_.currentComponent.compulsory_for_desktop.push_back(
+            parser->state_.currentComponent->compulsory_for_desktop.push_back(
                 Component::stringToCompulsoryForDesktop(parser->state_.currentData));
         } else if (currentElement == "developer") {
             parser->state_.currentDeveloper = false;
         } else if (currentElement == "launchable") {
             if (parser->state_.launchableType == Component::LaunchableType::URL) {
-                parser->state_.currentComponent.launchable.url = parser->state_.currentData;
+                parser->state_.currentComponent->launchable.url = parser->state_.currentData;
             } else if (parser->state_.launchableType == Component::LaunchableType::SERVICE) {
-                parser->state_.currentComponent.launchable.service = parser->state_.currentData;
+                parser->state_.currentComponent->launchable.service = parser->state_.currentData;
             } else if (parser->state_.launchableType == Component::LaunchableType::DESKTOP_ID) {
-                parser->state_.currentComponent.launchable.desktop_id = parser->state_.currentData;
+                parser->state_.currentComponent->launchable.desktop_id = parser->state_.currentData;
             } else if (parser->state_.launchableType == Component::LaunchableType::COCKPIT_MANIFEST) {
-                parser->state_.currentComponent.launchable.cockpit_manifest = parser->state_.currentData;
+                parser->state_.currentComponent->launchable.cockpit_manifest = parser->state_.currentData;
             } else {
                 spdlog::error("Unknown launchable type: {}", parser->state_.currentData);
             }
@@ -301,41 +279,41 @@ void AppStreamParser::endElementCallback(void *user_data, const xmlChar *name) {
             parser->state_.currentArtifact.size[parser->state_.currentArtifactSizeKey] = convertToSizeT(
                 parser->state_.currentData.c_str());
         } else if (currentElement == "bundle") {
-            parser->state_.currentComponent.bundle.id = parser->state_.currentData;
+            parser->state_.currentComponent->bundle.id = parser->state_.currentData;
         } else if (currentElement == "content_rating") {
-            parser->state_.currentComponent.content_rating = parser->state_.currentData;
+            parser->state_.currentComponent->content_rating = parser->state_.currentData;
         } else if (currentElement == "agreement") {
-            parser->state_.currentComponent.agreement = parser->state_.currentData;
+            parser->state_.currentComponent->agreement = parser->state_.currentData;
         } else if (currentElement == "keyword") {
-            parser->state_.currentComponent.keywords.push_back(parser->state_.currentData);
+            parser->state_.currentComponent->keywords.push_back(parser->state_.currentData);
         } else if (currentElement == "category") {
-            parser->state_.currentComponent.categories.push_back(parser->state_.currentData);
+            parser->state_.currentComponent->categories.push_back(parser->state_.currentData);
         } else if (currentElement == "icon") {
             parser->state_.currentIcon.value = parser->state_.currentData;
-            parser->state_.currentComponent.icons.push_back(parser->state_.currentIcon);
+            parser->state_.currentComponent->icons.push_back(parser->state_.currentIcon);
         } else if (currentElement == "suggest") {
-            parser->state_.currentComponent.suggests.push_back(parser->state_.currentData);
+            parser->state_.currentComponent->suggests.push_back(parser->state_.currentData);
         } else if (currentElement == "media_baseurl") {
-            parser->state_.currentComponent.media_baseurl = parser->state_.currentData;
+            parser->state_.currentComponent->media_baseurl = parser->state_.currentData;
         } else if (currentElement == "architecture") {
-            parser->state_.currentComponent.architecture = parser->state_.currentData;
+            parser->state_.currentComponent->architecture = parser->state_.currentData;
         } else if (currentElement == "releases") {
             parser->state_.insideReleases = false;
         } else if (currentElement == "release") {
-            parser->state_.currentComponent.releases.push_back(parser->state_.currentRelease);
+            parser->state_.currentComponent->releases.push_back(parser->state_.currentRelease);
         } else if (currentElement == "issues") {
             parser->state_.insideIssues = false;
         } else if (currentElement == "issue") {
             parser->state_.currentRelease.issues.push_back(parser->state_.currentIssue);
         } else if (currentElement == "language") {
-            parser->state_.currentComponent.addSupportedLanguage(parser->state_.currentData);
+            parser->state_.currentComponent->addSupportedLanguage(parser->state_.currentData);
         } else if (currentElement == "component") {
             parser->state_.insideComponent = false;
-            assert(!parser->state_.currentComponent.id.empty());
-            if (!parser->components_.count(parser->state_.currentComponent.id)) {
-                parser->components_[parser->state_.currentComponent.id] = parser->state_.currentComponent;
+            assert(!parser->state_.currentComponent->id.empty());
+            if (!parser->components_.count(parser->state_.currentComponent->id)) {
+                parser->components_[parser->state_.currentComponent->id] = std::move(parser->state_.currentComponent);
             } else {
-                SPDLOG_WARN("Duplicate: [{}]", parser->state_.currentComponent.id);
+                SPDLOG_WARN("Duplicate: [{}]", parser->state_.currentComponent->id);
             }
         }
     }
@@ -346,9 +324,7 @@ void AppStreamParser::endElementCallback(void *user_data, const xmlChar *name) {
 }
 
 void AppStreamParser::charactersCallback(void *user_data, const xmlChar *ch, const int len) {
-    spdlog::debug("{}", std::string_view(reinterpret_cast<const char *>(ch), len));
-    auto *parser = static_cast<AppStreamParser *>(user_data);
-    if (!parser->state_.currentElement.empty()) {
+    if (auto *parser = static_cast<AppStreamParser *>(user_data); !parser->state_.currentElement.empty()) {
         parser->state_.currentData.append(reinterpret_cast<const char *>(ch), len);
     }
 }
@@ -364,7 +340,7 @@ AppStreamParser::~AppStreamParser() {
 }
 
 void AppStreamParser::mmapFile(const std::string &filename) {
-    int fd = open(filename.c_str(), O_RDONLY);
+    const int fd = open(filename.c_str(), O_RDONLY);
     if (fd == -1) {
         spdlog::error("Failed to open file: {}", filename);
         exit(EXIT_FAILURE);
@@ -436,7 +412,7 @@ std::vector<std::string> AppStreamParser::getUniqueCategories() {
     std::unordered_set<std::string> uniqueCategories;
 
     for (const auto &[key, component]: components_) {
-        uniqueCategories.insert(component.categories.begin(), component.categories.end());
+        uniqueCategories.insert(component->categories.begin(), component->categories.end());
     }
 
     return {uniqueCategories.begin(), uniqueCategories.end()};
@@ -446,15 +422,15 @@ std::vector<std::string> AppStreamParser::getUniqueKeywords() {
     std::unordered_set<std::string> uniqueKeywords;
 
     for (const auto &[key, component]: components_) {
-        uniqueKeywords.insert(component.keywords.begin(), component.keywords.end());
+        uniqueKeywords.insert(component->keywords.begin(), component->keywords.end());
     }
 
     return {uniqueKeywords.begin(), uniqueKeywords.end()};
 }
 
-std::vector<Component> AppStreamParser::getSortedComponents(const SortOption option) {
+std::vector<std::shared_ptr<Component> > AppStreamParser::getSortedComponents(const SortOption option) {
     // Convert unordered_map to vector for sorting
-    std::vector<Component> sortedComponents;
+    std::vector<std::shared_ptr<Component> > sortedComponents;
     sortedComponents.reserve(components_.size());
     for (const auto &[key, component]: components_) {
         sortedComponents.push_back(component);
@@ -463,14 +439,16 @@ std::vector<Component> AppStreamParser::getSortedComponents(const SortOption opt
     // Sort based on the option
     switch (option) {
         case SortOption::BY_ID:
-            std::sort(sortedComponents.begin(), sortedComponents.end(), [](const Component &a, const Component &b) {
-                return a.id < b.id;
-            });
+            std::sort(sortedComponents.begin(), sortedComponents.end(),
+                      [](const std::shared_ptr<Component> &a, const std::shared_ptr<Component> &b) {
+                          return a->id < b->id;
+                      });
             break;
         case SortOption::BY_NAME:
-            std::sort(sortedComponents.begin(), sortedComponents.end(), [](const Component &a, const Component &b) {
-                return a.name < b.name;
-            });
+            std::sort(sortedComponents.begin(), sortedComponents.end(),
+                      [](const std::shared_ptr<Component> &a, const std::shared_ptr<Component> &b) {
+                          return a->name < b->name;
+                      });
             break;
         default:
             throw std::invalid_argument("Invalid sort option");
@@ -479,11 +457,11 @@ std::vector<Component> AppStreamParser::getSortedComponents(const SortOption opt
     return sortedComponents;
 }
 
-std::vector<Component> AppStreamParser::searchByCategory(const std::string &category) {
-    std::vector<Component> result;
+std::vector<std::shared_ptr<Component> > AppStreamParser::searchByCategory(const std::string &category) {
+    std::vector<std::shared_ptr<Component> > result;
 
     for (const auto &[key, component]: components_) {
-        if (std::find(component.categories.begin(), component.categories.end(), category) != component.categories.
+        if (std::find(component->categories.begin(), component->categories.end(), category) != component->categories.
             end()) {
             result.push_back(component);
         }
@@ -492,11 +470,11 @@ std::vector<Component> AppStreamParser::searchByCategory(const std::string &cate
     return result;
 }
 
-std::vector<Component> AppStreamParser::searchByKeyword(const std::string &keyword) {
-    std::vector<Component> result;
+std::vector<std::shared_ptr<Component> > AppStreamParser::searchByKeyword(const std::string &keyword) {
+    std::vector<std::shared_ptr<Component> > result;
 
     for (const auto &[key, component]: components_) {
-        if (std::find(component.keywords.begin(), component.keywords.end(), keyword) != component.keywords.end()) {
+        if (std::find(component->keywords.begin(), component->keywords.end(), keyword) != component->keywords.end()) {
             result.push_back(component);
         }
     }
@@ -508,6 +486,6 @@ size_t AppStreamParser::getTotalComponentCount() const {
     return components_.size();
 }
 
-const std::map<std::string, Component> &AppStreamParser::getComponents() const {
+const std::map<std::string, std::shared_ptr<Component> > &AppStreamParser::getComponents() const {
     return components_;
 }

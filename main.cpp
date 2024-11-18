@@ -18,6 +18,7 @@
 #include <spdlog/spdlog.h>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <sstream>
 #include <vector>
@@ -25,47 +26,48 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-// Function to get memory usage from /proc/self/stat
+/**
+ * @brief Retrieves the current memory usage of the process.
+ *
+ * This function reads the memory usage statistics from the `/proc/self/stat` file,
+ * which contains various information about the current process. It extracts the
+ * virtual memory size (vm_usage) and the resident set size (resident_set) from the file.
+ *
+ * @param[out] vm_usage The virtual memory usage in kilobytes.
+ * @param[out] resident_set The resident set size in kilobytes.
+ */
 void getMemoryUsage(double &vm_usage, double &resident_set) {
-    using std::ios_base;
-    using std::ifstream;
-    using std::string;
-
     vm_usage = 0.0;
     resident_set = 0.0;
 
-    // 'file' represents the file "/proc/self/stat"
-    ifstream file("/proc/self/stat", ios_base::in);
-
-    // Read in the data from the file
-    string line;
+    std::ifstream file("/proc/self/stat");
+    std::string line;
     std::getline(file, line);
-    file.close();
 
-    // Split the line by whitespace
     std::istringstream iss(line);
-    std::vector<string> fields;
-    string value;
-    while (iss >> value) {
-        fields.push_back(value);
-    }
 
-    // fields[22] and fields[23] represent virtual memory and resident set size in kB
-    if (fields.size() >= 24) {
+    if (std::vector<std::string> fields((std::istream_iterator<std::string>(iss)), std::istream_iterator<std::string>())
+        ; fields.size() >= 24) {
         unsigned long vsize = std::stoul(fields[22]);
         long rss = std::stol(fields[23]);
+        long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024;
 
-        long page_size_kb = sysconf(_SC_PAGE_SIZE) / 1024; // in case x86-64 is configured to use 2MB pages
         vm_usage = vsize / 1024.0;
         resident_set = rss * page_size_kb;
     }
 }
 
-// Function to get the file size in bytes
+/**
+ * @brief Gets the size of a file.
+ *
+ * This function retrieves the size of the specified file in bytes.
+ *
+ * @param filename The name of the file whose size is to be determined.
+ * @return The size of the file in bytes, or -1 if the file could not be accessed.
+ */
 long getFileSize(const std::string &filename) {
     struct stat stat_buf{};
-    const int rc = stat(filename.c_str(), &stat_buf);
-    return rc == 0 ? stat_buf.st_size : -1;
+    return stat(filename.c_str(), &stat_buf) == 0 ? stat_buf.st_size : -1;
 }
 
 int main(const int argc, char *argv[]) {
@@ -135,7 +137,7 @@ int main(const int argc, char *argv[]) {
         const auto componentsByCategory = parser->searchByCategory(sampleCategory);
         spdlog::info("Components in category '{}', ({}):", sampleCategory, sampleCategory.size());
         for (const auto &component: componentsByCategory) {
-            component.Dump();
+            component->Dump();
         }
 
         // After searching by category
@@ -147,7 +149,7 @@ int main(const int argc, char *argv[]) {
         const auto componentsByKeyword = parser->searchByKeyword(sampleKeyword);
         spdlog::info("Components with keyword '{}', ({}):", sampleKeyword, componentsByKeyword.size());
         for (const auto &comp: componentsByKeyword) {
-            comp.Dump();
+            comp->Dump();
         }
 
         const auto components = parser->getComponents();

@@ -18,9 +18,12 @@
 #define APPSTREAMPARSER_H
 
 #include "Component.h"
+
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
+
 #include <libxml/parser.h>
 
 
@@ -34,17 +37,17 @@ public:
 
     std::vector<std::string> getUniqueKeywords();
 
-    std::vector<Component> searchByCategory(const std::string &category);
+    std::vector<std::shared_ptr<Component> > searchByCategory(const std::string &category);
 
-    std::vector<Component> searchByKeyword(const std::string &keyword);
+    std::vector<std::shared_ptr<Component> > searchByKeyword(const std::string &keyword);
 
     enum class SortOption { BY_ID, BY_NAME };
 
-    std::vector<Component> getSortedComponents(SortOption option);
+    std::vector<std::shared_ptr<Component> > getSortedComponents(SortOption option);
 
     [[nodiscard]] size_t getTotalComponentCount() const;
 
-    [[nodiscard]] const std::map<std::string, Component> &getComponents() const;
+    [[nodiscard]] const std::map<std::string, std::shared_ptr<Component> > &getComponents() const;
 
 private:
     static constexpr char kEmptyString[] = "";
@@ -52,7 +55,7 @@ private:
     static constexpr char kReleaseUrgencyMedium[] = "medium";
     static constexpr char kIssueTypeGeneric[] = "generic";
 
-    std::map<std::string, Component> components_;
+    std::map<std::string, std::shared_ptr<Component> > components_;
     std::string language_;
 
     struct ParsingState {
@@ -62,15 +65,17 @@ private:
         bool insideArtifact = true;
         bool currentDeveloper = false;
 
+        std::shared_ptr<Component> currentComponent;
         std::string currentElement;
-        Component currentComponent;
-        Component::Icon currentIcon;
         std::string currentData;
+
+        Component::Icon currentIcon;
         Component::UrlType urlType;
         Component::LaunchableType launchableType;
         Component::Release currentRelease;
         Component::Issue currentIssue;
         Component::Artifact currentArtifact;
+
         std::string currentArtifactChecksumKey;
         std::string currentArtifactSizeKey;
         std::string language;
