@@ -49,6 +49,7 @@ the file contents into RAM.
 * pugixml - (DOM parser) produces the largest RAM footprint. Not usable.
 * rapidxml - (DOM parser) produces second largest RAM footprint. It has some nice features, and is high quality work. A
   SAX parser would be a nice addition. Note it does require C++20 minimum.
+  https://github.com/dwd/rapidxml/tree/master
 
 #### std::string_view usage
 
